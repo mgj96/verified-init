@@ -1,0 +1,36 @@
+{
+  "claims": {
+    "py.name": {
+      "evidence": "pyproject.toml -> name",
+      "status": "verified",
+      "text": "Python project `verified-init`."
+    },
+    "py.version": {
+      "evidence": "pyproject.toml -> requires-python = \">=3.9\"",
+      "status": "verified",
+      "text": "Requires Python >=3.9."
+    },
+    "repo.ci": {
+      "evidence": ".github/workflows/ -> 1 workflow file(s)",
+      "status": "verified",
+      "text": "CI runs on GitHub Actions: `ci.yml`."
+    },
+    "repo.ignored": {
+      "evidence": ".gitignore -> 5 directory pattern(s)",
+      "status": "verified",
+      "text": "Generated or ignored directories (do not edit): `__pycache__/`, `build/`, `dist/`, `*.egg-info/`, `.venv/`."
+    },
+    "repo.layout.tests": {
+      "evidence": "tests/ exists (conventional test directory name)",
+      "status": "inferred",
+      "text": "Tests live in `tests/`."
+    }
+  },
+  "detectors": [
+    "misc",
+    "repo"
+  ],
+  "generator": "verified-init@0.1.0",
+  "notFound": [],
+  "version": 1
+}

@@ -1,0 +1,13 @@
+{
+  "name": "verified-init",
+  "description": "Write a CLAUDE.md containing only facts the repository declares, with the source of every line attached, and detect when it drifts. Deterministic, offline, zero tokens.",
+  "version": "0.1.0",
+  "author": {
+    "name": "mgj96",
+    "url": "https://github.com/mgj96"
+  },
+  "homepage": "https://github.com/mgj96/verified-init",
+  "repository": "https://github.com/mgj96/verified-init",
+  "license": "MIT",
+  "keywords": ["claude-code", "claude.md", "context", "drift", "documentation"]
+}
