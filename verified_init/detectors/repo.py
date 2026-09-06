@@ -46,6 +46,39 @@ def detect(root, ctx):
     else:
         probes.append(Probe(id="repo.ci", looked_for=".github/workflows/*.yml"))
 
+    # Files a contributor is expected to read before changing anything.
+    for filename, label in (
+        ("CONTRIBUTING.md", "Contribution rules"),
+        ("CODE_OF_CONDUCT.md", "A code of conduct"),
+        ("SECURITY.md", "A security policy"),
+    ):
+        if exists(root, filename):
+            claims.append(
+                Claim(
+                    id="repo.doc.{}".format(filename.split(".")[0].lower()),
+                    section="Conventions",
+                    text="{} are documented in `{}`; read it before contributing.".format(
+                        label, filename
+                    ),
+                    status=VERIFIED,
+                    evidence="{} present".format(filename),
+                )
+            )
+
+    licence_file = next(
+        (f for f in ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING") if exists(root, f)), None
+    )
+    if licence_file:
+        claims.append(
+            Claim(
+                id="repo.licensefile",
+                section="Project",
+                text="License text is in `{}`.".format(licence_file),
+                status=VERIFIED,
+                evidence="{} present".format(licence_file),
+            )
+        )
+
     if exists(root, ".editorconfig"):
         claims.append(
             Claim(

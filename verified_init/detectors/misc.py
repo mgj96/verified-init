@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 
+from .. import frameworks
 from ..claims import Claim, Probe, VERIFIED
 from ..fsx import exists, first_existing, read_text
 
@@ -23,6 +24,67 @@ _EDITION_RE = re.compile(r"^\s*edition\s*=\s*[\"']([^\"']+)[\"']", re.MULTILINE)
 _PHONY_RE = re.compile(r"^\.PHONY:\s*(.+)$", re.MULTILINE)
 
 _PY_LOCKFILES = {"uv.lock": "uv", "poetry.lock": "poetry", "Pipfile.lock": "pipenv"}
+
+_DESCRIPTION_RE = re.compile(r"^\s*description\s*=\s*[\"']([^\"']+)[\"']", re.MULTILINE)
+#: Start of the `dependencies = [` array in a PEP 621 [project] table. The
+#: closing bracket is found by counting, not by regex: a requirement may carry
+#: extras (`sqlalchemy[asyncio]`), and a non-greedy `\]` stops at that inner
+#: bracket, silently dropping every dependency after it.
+_PY_DEPS_START_RE = re.compile(r"^[ \t]*dependencies[ \t]*=[ \t]*\[", re.MULTILINE)
+_QUOTED_RE = re.compile(r"[\"']([^\"']+)[\"']")
+#: A TOML section header, used to bound a [dependencies] table.
+_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$", re.MULTILINE)
+_GO_REQUIRE_RE = re.compile(r"^\s*([\w.\-]+(?:\.[\w.\-]+)*/[^\s]+)\s+v", re.MULTILINE)
+
+
+def _bracketed_array(text, start_match):
+    """Body of the array opened by ``start_match``, honouring nested brackets."""
+    depth = 0
+    for index in range(start_match.end() - 1, len(text)):
+        char = text[index]
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                return text[start_match.end() : index]
+    return ""  # unterminated array: report nothing rather than guess
+
+
+def _toml_table_keys(text, section):
+    """Keys declared directly under a ``[section]`` table.
+
+    A hand-rolled scan rather than a TOML parser: tomllib only exists from
+    Python 3.11, and this tool supports 3.9.
+    """
+    keys = []
+    inside = False
+    for line in text.splitlines():
+        header = _SECTION_RE.match(line)
+        if header:
+            inside = header.group(1).strip() == section
+            continue
+        if not inside:
+            continue
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "=" in stripped:
+            keys.append(stripped.split("=", 1)[0].strip().strip("\"'").lower())
+    return keys
+
+
+def _stack_claim(claim_id, section, prefix, labels, evidence, claims):
+    if labels:
+        claims.append(
+            Claim(
+                id=claim_id,
+                section=section,
+                text="{} {}.".format(prefix, ", ".join(labels)),
+                status=VERIFIED,
+                evidence=evidence,
+            )
+        )
 
 
 def _python(root, claims, probes):
@@ -56,6 +118,51 @@ def _python(root, claims, probes):
             )
         else:
             probes.append(Probe(id="py.version", looked_for="pyproject.toml -> requires-python"))
+
+    declared = set()
+    if pyproject is not None:
+        description = _DESCRIPTION_RE.search(pyproject)
+        if description:
+            claims.append(
+                Claim(
+                    id="py.description",
+                    section="Project",
+                    text=description.group(1).strip(),
+                    status=VERIFIED,
+                    evidence="pyproject.toml -> description",
+                )
+            )
+        start = _PY_DEPS_START_RE.search(pyproject)
+        if start:
+            declared.update(
+                frameworks.normalise_python_requirement(item)
+                for item in _QUOTED_RE.findall(_bracketed_array(pyproject, start))
+            )
+        declared.update(_toml_table_keys(pyproject, "tool.poetry.dependencies"))
+
+    requirements = read_text(root, "requirements.txt")
+    if requirements is not None:
+        declared.update(
+            frameworks.normalise_python_requirement(line) for line in requirements.splitlines()
+        )
+    declared.discard("")
+
+    _stack_claim(
+        "py.stack",
+        "Project",
+        "Built on",
+        frameworks.match(declared, frameworks.PYTHON),
+        "declared Python dependencies",
+        claims,
+    )
+    _stack_claim(
+        "py.testframework",
+        "Build & Test",
+        "Test framework:",
+        frameworks.match(declared, frameworks.PYTHON_TEST),
+        "declared Python dependencies",
+        claims,
+    )
 
     lock = first_existing(root, sorted(_PY_LOCKFILES))
     if lock:
@@ -116,6 +223,15 @@ def _go(root, claims):
             evidence="go.mod present (standard Go toolchain)",
         )
     )
+    required = set(_GO_REQUIRE_RE.findall(mod))
+    _stack_claim(
+        "go.stack",
+        "Project",
+        "Built on",
+        frameworks.match_prefix(required, frameworks.GO),
+        "go.mod -> require",
+        claims,
+    )
 
 
 def _rust(root, claims):
@@ -153,6 +269,14 @@ def _rust(root, claims):
             status=VERIFIED,
             evidence="Cargo.toml present (standard cargo commands)",
         )
+    )
+    _stack_claim(
+        "rust.stack",
+        "Project",
+        "Built on",
+        frameworks.match(_toml_table_keys(cargo, "dependencies"), frameworks.RUST),
+        "Cargo.toml -> [dependencies]",
+        claims,
     )
 
 

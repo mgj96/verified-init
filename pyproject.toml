@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "verified-init"
 version = "0.1.0"
-description = "Generate an AGENTS.md that contains only claims it can prove. No model, no network, no tokens."
+description = "Generate a CLAUDE.md that contains only claims it can prove. No model, no network, no tokens."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"

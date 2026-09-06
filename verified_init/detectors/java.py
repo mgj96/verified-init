@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 
+from .. import frameworks
 from ..claims import Claim, Probe, INFERRED, VERIFIED
 from ..fsx import exists, first_existing, is_dir, read_text
 
@@ -22,6 +23,36 @@ _COMPAT_RE = re.compile(
     r"['\"]?(?:JavaVersion\.VERSION_)?([\d._]+)['\"]?"
 )
 _INCLUDE_RE = re.compile(r"include\s*\(?\s*['\"]:?([^'\"]+)['\"]")
+_ARTIFACT_RE = re.compile(r"<artifactId>\s*([^<]+?)\s*</artifactId>")
+#: Gradle coordinates: implementation("group:artifact:version") or the
+#: single-quoted Groovy form. Only the artifact segment is needed.
+_GRADLE_DEP_RE = re.compile(r"['\"][\w.\-]+:([\w.\-]+)(?::[^'\"]*)?['\"]")
+
+
+def _stack_claims(prefix, artifacts, source, claims):
+    """Turn declared artifact ids into stack and test-framework claims."""
+    stack = frameworks.match(artifacts, frameworks.JAVA)
+    if stack:
+        claims.append(
+            Claim(
+                id="{}.stack".format(prefix),
+                section="Project",
+                text="Built on {}.".format(", ".join(stack)),
+                status=VERIFIED,
+                evidence="{} -> declared dependencies".format(source),
+            )
+        )
+    runners = frameworks.match(artifacts, frameworks.JAVA_TEST)
+    if runners:
+        claims.append(
+            Claim(
+                id="{}.testframework".format(prefix),
+                section="Build & Test",
+                text="Test stack: {}.".format(", ".join(runners)),
+                status=VERIFIED,
+                evidence="{} -> declared dependencies".format(source),
+            )
+        )
 
 #: Standard layout directories. Present-but-undeclared, hence INFERRED.
 STANDARD_LAYOUT = [
@@ -103,6 +134,8 @@ def _detect_maven(root, claims, probes):
             )
         )
 
+    _stack_claims("java.maven", set(_ARTIFACT_RE.findall(pom)), "pom.xml", claims)
+
     modules = _MODULE_RE.findall(pom)
     if modules:
         listed = ", ".join("`{}`".format(m) for m in modules)
@@ -171,6 +204,8 @@ def _detect_gradle(root, claims, probes):
                 looked_for="JavaLanguageVersion.of(N) or sourceCompatibility in the Gradle build file",
             )
         )
+
+    _stack_claims("java.gradle", set(_GRADLE_DEP_RE.findall(build)), build_file, claims)
 
     settings = read_text(root, settings_file) or "" if settings_file else ""
     includes = _INCLUDE_RE.findall(settings)

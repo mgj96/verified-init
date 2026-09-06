@@ -1,5 +1,10 @@
 {
   "claims": {
+    "py.description": {
+      "evidence": "pyproject.toml -> description",
+      "status": "verified",
+      "text": "Generate a CLAUDE.md that contains only claims it can prove. No model, no network, no tokens."
+    },
     "py.name": {
       "evidence": "pyproject.toml -> name",
       "status": "verified",
@@ -24,6 +29,11 @@
       "evidence": "tests/ exists (conventional test directory name)",
       "status": "inferred",
       "text": "Tests live in `tests/`."
+    },
+    "repo.licensefile": {
+      "evidence": "LICENSE present",
+      "status": "verified",
+      "text": "License text is in `LICENSE`."
     }
   },
   "detectors": [

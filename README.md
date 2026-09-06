@@ -34,32 +34,47 @@ looked for and did not find.
 
 ```console
 $ verified-init --report .
-verified-init  /home/me/verified-init
-detectors: misc, repo
+detectors: java, repo
 
-VERIFIED (4)  read from a declared source
-  + py.name
-      Python project `verified-init`.
-      evidence: pyproject.toml -> name
-  + py.version
-      Requires Python >=3.9.
-      evidence: pyproject.toml -> requires-python = ">=3.9"
+VERIFIED (10)  read from a declared source
+  + java.maven.artifact
+      Maven project `parking-api`.
+      evidence: pom.xml -> <artifactId>
+  + java.maven.stack
+      Built on Lombok, Spring Boot Web (MVC), Spring Data JPA.
+      evidence: pom.xml -> declared dependencies
+  + java.version
+      Targets Java 17.
+      evidence: pom.xml -> Java level property = 17
+  + java.maven.wrapper
+      Use the bundled Maven wrapper (`./mvnw`); no system Maven required.
+      evidence: mvnw present
+  + java.maven.build
+      Build with `./mvnw package`.
+      evidence: pom.xml present (standard Maven lifecycle)
+  + java.maven.testframework
+      Test stack: Spring Boot Test, Testcontainers.
+      evidence: pom.xml -> declared dependencies
   + repo.ci
-      CI runs on GitHub Actions: `ci.yml`.
+      CI runs on GitHub Actions: `build.yml`.
       evidence: .github/workflows/ -> 1 workflow file(s)
-  + repo.ignored
-      Generated or ignored directories (do not edit): `__pycache__/`, `build/`, ...
-      evidence: .gitignore -> 5 directory pattern(s)
+  ...
 
-INFERRED (1)  matched a convention, not declared
-  ? repo.layout.tests
-      Tests live in `tests/`.
-      evidence: tests/ exists (conventional test directory name)
+INFERRED (3)  matched a convention, not declared
+  ? java.layout.src.test.java
+      Tests live in `src/test/java/`.
+      evidence: src/test/java/ exists (standard Maven/Gradle layout, not declared in the build file)
+  ...
 
-4 verified, 1 inferred, 0 not found
+10 verified, 3 inferred, 0 not found
 ```
 
-That output is real — it is this repository describing itself.
+Real output from a Spring Boot project, abbreviated at the `...` marks.
+
+Note what is *not* claimed. `Built on Spring Boot Web (MVC)` is verified because
+`spring-boot-starter-web` is declared in `pom.xml`. `Tests live in src/test/java/`
+is only inferred, because the directory exists but no build file says that is
+where tests come from. The tool will not upgrade the second one to the first.
 
 ## Install as a Claude Code skill
 
@@ -161,10 +176,14 @@ Written by a human. Never touched by the tool.
 
 | Detector | Sources |
 | --- | --- |
-| `node` | `package.json` (packageManager, engines, scripts, workspaces, type), lockfiles, `tsconfig.json`, `.nvmrc` |
-| `java` | `pom.xml` (artifactId, compiler level, modules), `build.gradle[.kts]` (toolchain, sourceCompatibility), `settings.gradle[.kts]`, `mvnw` / `gradlew` |
-| `misc` | `pyproject.toml`, `requirements.txt`, `uv.lock` / `poetry.lock`, `go.mod`, `Cargo.toml`, `Makefile` (`.PHONY` only) |
-| `repo` | `.github/workflows/`, `.editorconfig`, `.gitignore`, other agent instruction files, conventional source and test directories |
+| `node` | `package.json` — description, license, packageManager, engines, scripts, workspaces, `type`, **declared dependencies → stack and test runner** (Next.js, React, Vue, VitePress, Astro, Nuxt, Express, NestJS, Electron, Vitest, Jest, Playwright, …); lockfiles, `tsconfig.json`, `.nvmrc` |
+| `java` | `pom.xml` — artifactId, compiler level, modules, **declared `<artifactId>`s → stack** (Spring Boot Web/WebFlux/Data JPA/Security, Hibernate, Lombok, MapStruct, Quarkus, Micronaut, JUnit 5, Mockito, Testcontainers, …); `build.gradle[.kts]` toolchain and coordinates, `settings.gradle[.kts]`, `mvnw` / `gradlew` |
+| `misc` | `pyproject.toml` (description, requires-python, **dependencies → Django / FastAPI / Flask / SQLAlchemy / pytest …**), `requirements.txt`, `uv.lock` / `poetry.lock`, `go.mod` (**require → Gin / Echo / GORM / Cobra**), `Cargo.toml` (**[dependencies] → Axum / Actix / Tokio / Serde**), `Makefile` (`.PHONY` only) |
+| `repo` | `.github/workflows/`, `.editorconfig`, `.gitignore`, `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, other agent instruction files, conventional source and test directories |
+
+Stack detection reads the dependency the project **declared**, so it stays
+verified. An unrecognised dependency produces no claim at all — a wrong stack
+label would be worse than a missing one.
 
 ## What it will never do
 
@@ -176,6 +195,9 @@ Written by a human. Never touched by the tool.
   enforced by the constructor, not by discipline.
 - **Claim its own output.** The file being written is excluded from detection,
   so generating it cannot make the next `--check` report phantom drift.
+- **Contradict itself.** A specific claim silences the generic one it answers:
+  once `src/test/java/` is reported, the generic "no test directory found" line
+  is suppressed rather than printed three lines below it.
 
 ## Determinism is a tested property
 
@@ -187,7 +209,7 @@ section then id, and no timestamp is recorded.
 python -m unittest discover -s tests -v
 ```
 
-44 tests, no dependencies. `TestDeterminism` pins the property down explicitly,
+59 tests, no dependencies. `TestDeterminism` pins the property down explicitly,
 alongside a regression for the self-reference bug the suite caught during
 development, and `TestSkillPackaging` guards the skill directory so the runner
 cannot silently stop resolving the package.

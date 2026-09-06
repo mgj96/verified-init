@@ -93,7 +93,26 @@ def _analysis_to_dict(analysis) -> dict:
     }
 
 
+def _force_utf8_streams() -> None:
+    """Make console output independent of the machine's code page.
+
+    Manifests routinely carry non-ASCII text: a Korean description, an umlaut,
+    an emoji. On a Windows console using a legacy code page, writing that text
+    raises UnicodeEncodeError and the tool dies with a traceback instead of
+    printing a report. ``errors="replace"`` keeps a legacy console readable
+    while redirected output stays exact UTF-8.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            # Not a reconfigurable text stream (a test harness capture, a
+            # closed pipe). Nothing to do; writing may still succeed.
+            pass
+
+
 def main(argv=None) -> int:
+    _force_utf8_streams()
     args = build_parser().parse_args(argv)
 
     root = os.path.abspath(args.path)

@@ -14,6 +14,16 @@ from .detectors import DETECTORS
 
 DEFAULT_OUTPUT = "CLAUDE.md"
 
+#: A specific claim makes a generic one redundant, or outright contradicts it.
+#: Java's ``src/test/java`` says where the tests are, so the generic "looked for
+#: test/, tests/ and found none" probe would appear alongside it and read as a
+#: contradiction. Detectors cannot see each other, so the resolution lives here.
+SUPERSEDES = {
+    "java.layout.src.main.java": ("repo.layout.src",),
+    "java.layout.src.test.java": ("repo.layout.tests", "repo.layout.test"),
+    "node.workspaces": ("repo.layout.packages",),
+}
+
 
 def analyze(root: str, output_name: str = DEFAULT_OUTPUT) -> Analysis:
     """Read ``root`` and return every claim that could be justified.
@@ -48,8 +58,16 @@ def analyze(root: str, output_name: str = DEFAULT_OUTPUT) -> Analysis:
                 by_id[claim.id] = claim
         all_probes.extend(probes)
 
-    # A probe is only worth reporting if nothing ended up proving that id.
-    open_probes = [p for p in all_probes if p.id not in by_id]
+    superseded = set()
+    for claim_id, replaced in SUPERSEDES.items():
+        if claim_id in by_id:
+            superseded.update(replaced)
+    for claim_id in superseded:
+        by_id.pop(claim_id, None)
+
+    # A probe is only worth reporting if nothing ended up proving that id, and
+    # nothing more specific has already answered the question.
+    open_probes = [p for p in all_probes if p.id not in by_id and p.id not in superseded]
     open_probes.sort(key=lambda p: p.id)
 
     return Analysis(

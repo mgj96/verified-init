@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sys
+import subprocess
 import tempfile
 import unittest
 
@@ -23,6 +24,7 @@ from verified_init import (  # noqa: E402
     render_agents_md,
     render_report,
 )
+from verified_init import frameworks  # noqa: E402
 from verified_init.claims import Claim  # noqa: E402
 from verified_init.cli import main  # noqa: E402
 
@@ -407,6 +409,225 @@ class TestCli(RepoCase):
         self.assertEqual(main([root, "--report"]), 0)
         self.assertEqual(main([root, "--json"]), 0)
         self.assertFalse(os.path.exists(os.path.join(root, "CLAUDE.md")))
+
+
+class TestSupersedes(RepoCase):
+    """A specific claim must silence the generic one that contradicts it."""
+
+    def test_java_test_layout_silences_the_generic_missing_tests_probe(self):
+        """Regression: the file said "tests live in src/test/java" and, three
+        lines later, "test dirs: checked for, absent". Both were true of their
+        own detector and together they read as a contradiction."""
+        root = self.fixture(
+            {
+                "pom.xml": "<project><artifactId>x</artifactId></project>",
+                "src/test/java/T.java": "class T {}\n",
+                "src/main/java/A.java": "class A {}\n",
+            }
+        )
+        a = analyze(root)
+        self.assertIsNotNone(a.by_id("java.layout.src.test.java"))
+        self.assertNotIn("repo.layout.tests", [p.id for p in a.probes])
+
+    def test_java_source_layout_silences_the_generic_src_claim(self):
+        root = self.fixture(
+            {
+                "pom.xml": "<project><artifactId>x</artifactId></project>",
+                "src/main/java/A.java": "class A {}\n",
+            }
+        )
+        a = analyze(root)
+        self.assertIsNotNone(a.by_id("java.layout.src.main.java"))
+        self.assertIsNone(a.by_id("repo.layout.src"))
+
+    def test_a_non_java_project_still_gets_the_generic_claims(self):
+        root = self.fixture({"package.json": '{"name":"x"}', "src/i.js": "", "tests/t.js": ""})
+        a = analyze(root)
+        self.assertIsNotNone(a.by_id("repo.layout.src"))
+        self.assertIsNotNone(a.by_id("repo.layout.tests"))
+
+
+class TestNonAsciiOutput(RepoCase):
+    """Real manifests carry non-ASCII text; the tool must survive printing it."""
+
+    KOREAN = "개발 학습 노트 (CS·ML) VitePress 사이트"
+
+    def test_written_file_keeps_non_ascii_intact(self):
+        root = self.fixture(
+            {"package.json": json.dumps({"name": "x", "description": self.KOREAN})}
+        )
+        self.assertEqual(main([root]), 0)
+        with open(os.path.join(root, "CLAUDE.md"), encoding="utf-8") as fh:
+            self.assertIn(self.KOREAN, fh.read())
+
+    def test_report_does_not_crash_on_a_legacy_console_code_page(self):
+        """Regression: --report died with UnicodeEncodeError under cp1252.
+
+        Reproduced by running the CLI in a subprocess whose stdio encoding is a
+        legacy Windows code page that cannot represent Korean. Before the fix
+        this exited 1 with a traceback.
+        """
+        root = self.fixture(
+            {"package.json": json.dumps({"name": "x", "description": self.KOREAN})}
+        )
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = dict(os.environ, PYTHONIOENCODING="cp1252", PYTHONPATH=repo)
+
+        result = subprocess.run(
+            [sys.executable, "-m", "verified_init", "--report", root],
+            capture_output=True,
+            env=env,
+            cwd=repo,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            "CLI crashed under cp1252: {}".format(result.stderr.decode("utf-8", "replace")),
+        )
+
+
+class TestFrameworks(RepoCase):
+    """Stack detection reads declared dependencies, so it stays VERIFIED."""
+
+    def test_node_stack_and_test_runner_from_dependencies(self):
+        root = self.fixture(
+            {
+                "package.json": json.dumps(
+                    {
+                        "name": "site",
+                        "description": "docs site",
+                        "license": "MIT",
+                        "devDependencies": {"vitepress": "^1.6.3", "vitest": "^2.0.0"},
+                    }
+                )
+            }
+        )
+        a = analyze(root)
+        self.assertIn("VitePress", a.by_id("node.stack").text)
+        self.assertIn("Vitest", a.by_id("node.testframework").text)
+        self.assertEqual(a.by_id("node.description").text, "docs site")
+        self.assertIn("MIT", a.by_id("node.license").text)
+
+    def test_unrecognised_dependencies_produce_no_stack_claim(self):
+        """A wrong stack label is worse than a missing one."""
+        root = self.fixture(
+            {"package.json": json.dumps({"name": "x", "dependencies": {"left-pad": "1.0.0"}})}
+        )
+        self.assertIsNone(analyze(root).by_id("node.stack"))
+
+    def test_stack_labels_are_sorted_for_determinism(self):
+        root = self.fixture(
+            {
+                "package.json": json.dumps(
+                    {"name": "x", "dependencies": {"vue": "3", "astro": "4", "react": "18"}}
+                )
+            }
+        )
+        text = analyze(root).by_id("node.stack").text
+        self.assertIn("Astro, React, Vue", text)
+
+    def test_java_maven_stack_and_test_stack(self):
+        root = self.fixture(
+            {
+                "pom.xml": (
+                    "<project><artifactId>parking-api</artifactId><dependencies>"
+                    "<dependency><artifactId>spring-boot-starter-web</artifactId></dependency>"
+                    "<dependency><artifactId>lombok</artifactId></dependency>"
+                    "<dependency><artifactId>spring-boot-starter-test</artifactId></dependency>"
+                    "</dependencies></project>"
+                )
+            }
+        )
+        a = analyze(root)
+        self.assertIn("Spring Boot Web (MVC)", a.by_id("java.maven.stack").text)
+        self.assertIn("Lombok", a.by_id("java.maven.stack").text)
+        self.assertIn("Spring Boot Test", a.by_id("java.maven.testframework").text)
+
+    def test_java_gradle_stack_from_coordinates(self):
+        root = self.fixture(
+            {
+                "build.gradle.kts": (
+                    'implementation("org.springframework.boot:spring-boot-starter-webflux")\n'
+                    "implementation('io.micronaut:micronaut-core:4.0.0')\n"
+                )
+            }
+        )
+        self.assertIn("Spring WebFlux", analyze(root).by_id("java.gradle.stack").text)
+
+    def test_python_extras_do_not_truncate_the_dependency_array(self):
+        """Regression: a `[` inside a requirement ended the array scan early.
+
+        `sqlalchemy[asyncio]` made a non-greedy regex stop at the extras
+        bracket, silently discarding every dependency declared after it.
+        """
+        root = self.fixture(
+            {
+                "pyproject.toml": (
+                    "[project]\nname = 's'\n"
+                    'dependencies = ["fastapi>=0.110", "sqlalchemy[asyncio]==2.0", "pytest>=8"]\n'
+                )
+            }
+        )
+        a = analyze(root)
+        stack = a.by_id("py.stack").text
+        self.assertIn("FastAPI", stack)
+        self.assertIn("SQLAlchemy", stack)
+        self.assertIn("pytest", a.by_id("py.testframework").text)
+
+    def test_python_multiline_dependency_array(self):
+        root = self.fixture(
+            {
+                "pyproject.toml": (
+                    "[project]\nname = 's'\ndependencies = [\n"
+                    '  "django>=5",\n  "celery[redis]>=5",\n]\n'
+                )
+            }
+        )
+        stack = analyze(root).by_id("py.stack").text
+        self.assertIn("Django", stack)
+        self.assertIn("Celery", stack)
+
+    def test_go_stack_matches_versioned_module_paths(self):
+        root = self.fixture(
+            {
+                "go.mod": (
+                    "module github.com/me/api\n\ngo 1.22\n\nrequire (\n"
+                    "\tgithub.com/gin-gonic/gin v1.9.1\n\tgorm.io/gorm v1.25.0\n)\n"
+                )
+            }
+        )
+        stack = analyze(root).by_id("go.stack").text
+        self.assertIn("Gin", stack)
+        self.assertIn("GORM", stack)
+
+    def test_rust_stack_from_dependencies_table_only(self):
+        root = self.fixture(
+            {
+                "Cargo.toml": (
+                    '[package]\nname = "s"\nedition = "2021"\n\n'
+                    '[dependencies]\naxum = "0.7"\ntokio = { version = "1" }\n\n'
+                    '[dev-dependencies]\nrocket = "0.5"\n'
+                )
+            }
+        )
+        stack = analyze(root).by_id("rust.stack").text
+        self.assertIn("Axum", stack)
+        self.assertIn("Tokio", stack)
+        self.assertNotIn("Rocket", stack, "dev-dependencies must not be read as the stack")
+
+    def test_python_requirement_normalisation(self):
+        cases = {
+            "Django>=4.2": "django",
+            "uvicorn[standard]==0.30.1": "uvicorn",
+            "  Flask  ": "flask",
+            "typing_extensions": "typing-extensions",
+            "# a comment": "",
+            "-r base.txt": "",
+            "": "",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(frameworks.normalise_python_requirement(raw), expected)
 
 
 class TestSkillPackaging(unittest.TestCase):

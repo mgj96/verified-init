@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .. import frameworks
 from ..claims import Claim, Probe, VERIFIED
 from ..fsx import exists, first_existing, read_json
 
@@ -36,6 +37,62 @@ def detect(root, ctx):
                 text="This is the `{}` Node.js package.".format(name),
                 status=VERIFIED,
                 evidence="package.json -> name",
+            )
+        )
+
+    description = pkg.get("description")
+    if isinstance(description, str) and description.strip():
+        claims.append(
+            Claim(
+                id="node.description",
+                section="Project",
+                text=description.strip(),
+                status=VERIFIED,
+                evidence="package.json -> description",
+            )
+        )
+
+    # What the project is built on is declared, not guessed: the dependency is
+    # in the manifest. This is usually the most useful line in the whole file.
+    declared = set()
+    for field in ("dependencies", "devDependencies", "peerDependencies"):
+        block = pkg.get(field)
+        if isinstance(block, dict):
+            declared.update(block)
+
+    stack = frameworks.match(declared, frameworks.NODE)
+    if stack:
+        claims.append(
+            Claim(
+                id="node.stack",
+                section="Project",
+                text="Built on {}.".format(", ".join(stack)),
+                status=VERIFIED,
+                evidence="package.json -> dependencies/devDependencies",
+            )
+        )
+
+    runners = frameworks.match(declared, frameworks.NODE_TEST)
+    if runners:
+        claims.append(
+            Claim(
+                id="node.testframework",
+                section="Build & Test",
+                text="Test framework: {}.".format(", ".join(runners)),
+                status=VERIFIED,
+                evidence="package.json -> declared dependencies",
+            )
+        )
+
+    licence = pkg.get("license")
+    if isinstance(licence, str) and licence.strip():
+        claims.append(
+            Claim(
+                id="node.license",
+                section="Project",
+                text="Licensed under {}.".format(licence.strip()),
+                status=VERIFIED,
+                evidence='package.json -> license = "{}"'.format(licence.strip()),
             )
         )
 
