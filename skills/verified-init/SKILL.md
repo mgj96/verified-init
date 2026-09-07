@@ -31,6 +31,13 @@ That writes nothing. It prints every claim next to the file it came from.
 | Machine-readable claims | `python scripts/run.py --json <path>` |
 | Write `AGENTS.md` instead | `python scripts/run.py --out AGENTS.md <path>` |
 
+`AGENTS.md` is the cross-agent filename that 23 other agents read, but **Claude
+Code does not read it** — its docs say so directly: *"Claude Code reads
+`CLAUDE.md`, not `AGENTS.md`."* There is no fallback. If a repository wants both,
+generate `AGENTS.md` and put the single line `@AGENTS.md` in `CLAUDE.md`; the
+import is expanded from the live file at launch. On Windows that import is the
+only option, because a symlink needs Administrator or Developer Mode.
+
 Paths are relative to this skill's directory; use an absolute path to
 `run.py` when working elsewhere. If the package is pip-installed, the
 `verified-init` command does the same thing.
@@ -47,6 +54,13 @@ Paths are relative to this skill's directory; use an absolute path to
 directory exists, and that is marked `_(inferred)_`.
 `<maven.compiler.release>17</maven.compiler.release>` in `pom.xml` is a
 declaration, and that is verified. Report the distinction; do not flatten it.
+
+**Two sources may both be right.** `.github/workflows/` is read as its own
+detector, so a repository can carry both `java.version` (from `pom.xml`) and
+`ci.toolchain.java` (from `setup-java`). Neither replaces the other. If they
+disagree, say so — a manifest that claims Java 17 while CI builds on 21 is the
+most useful thing the tool can tell you, and flattening it to one line destroys
+it.
 
 ## Rules
 

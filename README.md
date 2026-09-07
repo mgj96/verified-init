@@ -68,30 +68,30 @@ looked for and did not find.
 
 ```console
 $ verified-init --report .
-detectors: java, repo
+detectors: java, ci, repo
 
-VERIFIED (10)  read from a declared source
+VERIFIED (12)  read from a declared source
   + java.maven.artifact
       Maven project `parking-api`.
       evidence: pom.xml -> <artifactId>
   + java.maven.stack
       Built on Lombok, Spring Boot Web (MVC), Spring Data JPA.
       evidence: pom.xml -> declared dependencies
-  + java.version
-      Targets Java 17.
-      evidence: pom.xml -> Java level property = 17
+  + ci.toolchain.java
+      CI builds on Java 17.
+      evidence: .github/workflows/build.yml -> java-version
   + java.maven.wrapper
       Use the bundled Maven wrapper (`./mvnw`); no system Maven required.
       evidence: mvnw present
-  + java.maven.build
-      Build with `./mvnw package`.
-      evidence: pom.xml present (standard Maven lifecycle)
+  + java.version
+      Targets Java 17.
+      evidence: pom.xml -> Java level property = 17
+  + ci.commands
+      CI runs, in order: `./mvnw -B package`.
+      evidence: .github/workflows/build.yml -> run: steps
   + java.maven.testframework
       Test stack: Spring Boot Test, Testcontainers.
       evidence: pom.xml -> declared dependencies
-  + repo.ci
-      CI runs on GitHub Actions: `build.yml`.
-      evidence: .github/workflows/ -> 1 workflow file(s)
   ...
 
 INFERRED (3)  matched a convention, not declared
@@ -100,10 +100,14 @@ INFERRED (3)  matched a convention, not declared
       evidence: src/test/java/ exists (standard Maven/Gradle layout, not declared in the build file)
   ...
 
-10 verified, 3 inferred, 0 not found
+12 verified, 3 inferred, 0 not found
 ```
 
 Real output from a Spring Boot project, abbreviated at the `...` marks.
+
+Note `java.version` and `ci.toolchain.java` sitting side by side. The manifest and
+the workflow are two different sources, so both are reported. They agree here;
+when they disagree, that is the finding.
 
 Note what is *not* claimed. `Built on Spring Boot Web (MVC)` is verified because
 `spring-boot-starter-web` is declared in `pom.xml`. `Tests live in src/test/java/`
