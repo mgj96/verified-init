@@ -400,6 +400,36 @@ class TestCli(RepoCase):
             self.assertIn("# AGENTS.md", fh.read())
         self.assertEqual(main([root, "--out", "AGENTS.md", "--check"]), 0)
 
+    def test_messages_name_the_file_actually_being_written(self):
+        """The tool must not be wrong about its own output.
+
+        Regression: the drift message and the refusal message were hardcoded to
+        "AGENTS.md" from before the default changed to CLAUDE.md, so `--check`
+        reported that AGENTS.md had drifted while the file on disk was
+        CLAUDE.md. A tool whose entire pitch is provenance cannot misname its
+        own artifact.
+        """
+        import io
+        from contextlib import redirect_stdout, redirect_stderr
+
+        for out_name in ("CLAUDE.md", "AGENTS.md"):
+            with self.subTest(out=out_name):
+                root = self.fixture({"package.json": '{"name":"x","scripts":{"test":"jest"}}'})
+                self.assertEqual(main([root, "--out", out_name]), 0)
+                with open(os.path.join(root, "package.json"), "w", encoding="utf-8") as fh:
+                    fh.write('{"name":"x","scripts":{"test":"vitest"}}')
+
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    self.assertEqual(main([root, "--out", out_name, "--check"]), 1)
+                self.assertIn("{} has drifted".format(out_name), buf.getvalue())
+
+        empty = self.fixture({"README.md": "hi\n"})
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertEqual(main([empty, "--out", "AGENTS.md"]), 2)
+        self.assertIn("Refusing to write a AGENTS.md", err.getvalue())
+
     def test_check_without_a_baseline_is_an_error(self):
         root = self.fixture({"package.json": '{"name":"x"}'})
         self.assertEqual(main([root, "--check"]), 2)

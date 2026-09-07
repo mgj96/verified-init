@@ -153,6 +153,20 @@ verified-init --out AGENTS.md  # the cross-agent filename instead
 
 From a clone with nothing installed: `python -m verified_init --report .`
 
+**On `--out AGENTS.md`:** [agents.md](https://agents.md) lists 23 agents that read
+it — Codex, Cursor, Jules, Aider, goose, Zed, Windsurf, Gemini CLI and others —
+and it is stewarded by the Agentic AI Foundation at the Linux Foundation. Claude
+Code is not one of them: its own docs open with *"Claude Code reads `CLAUDE.md`,
+not `AGENTS.md`."* There is no fallback read. To serve both, generate
+`AGENTS.md` and put a single line in `CLAUDE.md`:
+
+```markdown
+@AGENTS.md
+```
+
+The `@` import is expanded from the live file at launch, and on Windows it is the
+only option — a symlink needs Administrator or Developer Mode.
+
 Exit codes: `0` ok / no drift, `1` drift detected, `2` nothing provable.
 
 ## Three tiers, and why the third one matters
@@ -252,7 +266,7 @@ section then id, and no timestamp is recorded.
 python -m unittest discover -s tests -v
 ```
 
-66 tests, no dependencies. `TestDeterminism` pins the property down explicitly,
+67 tests, no dependencies. `TestDeterminism` pins the property down explicitly,
 alongside a regression for the self-reference bug the suite caught during
 development, and `TestSkillPackaging` guards the skill directory so the runner
 cannot silently stop resolving the package.

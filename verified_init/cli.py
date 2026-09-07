@@ -27,7 +27,7 @@ from .state import (
 )
 
 DESCRIPTION = (
-    "Generate an AGENTS.md that contains only claims it can prove. "
+    "Generate a CLAUDE.md that contains only claims it can prove. "
     "Reads manifests and the filesystem. Never executes your code, "
     "never opens a socket, never calls a model."
 )
@@ -127,7 +127,7 @@ def main(argv=None) -> int:
             "verified-init: nothing provable found in {}\n"
             "  No package.json, pom.xml, build.gradle, go.mod, Cargo.toml,\n"
             "  pyproject.toml or Makefile was readable here.\n"
-            "  Refusing to write an AGENTS.md of guesses.\n".format(root)
+            "  Refusing to write a {} of guesses.\n".format(root, args.out)
         )
         return EXIT_ERROR
 
@@ -159,7 +159,7 @@ def main(argv=None) -> int:
             )
             return EXIT_OK
         sys.stdout.write(
-            "verified-init: AGENTS.md has drifted from the repository\n"
+            "verified-init: {} has drifted from the repository\n".format(args.out)
             + render_diff(diff)
             + "\n\nRun `verified-init` to regenerate.\n"
         )
