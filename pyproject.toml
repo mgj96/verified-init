@@ -10,15 +10,22 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
 keywords = [
-    "agents.md",
-    "ai-agents",
+    "agents-md",
+    "claude-md",
     "claude-code",
-    "codex",
-    "cursor",
-    "copilot",
-    "context",
+    "ai-agents",
+    "agent-context",
+    "context-engineering",
     "documentation-drift",
+    "stale-docs",
     "provenance",
+    "offline",
+    "air-gapped",
+    "zero-dependency",
+    "deterministic",
+    "ci-check",
+    "gradle",
+    "maven",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

@@ -9,6 +9,28 @@ where a model-driven `/init` is not an option and a tool that phones home is not
 allowed. It is a personal tool published in case it is useful to someone with
 the same constraint.
 
+## Reach for this when
+
+- **You cannot call a model.** Air-gapped network, on-prem, a client contract
+  that forbids sending source to a third party, or a CI runner with no API key.
+  `/init` is not available to you; this is.
+- **Your `CLAUDE.md` tells the agent to run a command that no longer exists.**
+  A script got renamed, a directory moved, and the file kept saying otherwise.
+  `--check` turns that into a failing pull request instead of a wrong answer
+  three months later.
+- **You do not trust a generated context file you did not watch being written.**
+  Every line here names the file it came from, so you can audit it in one pass
+  instead of re-deriving the whole thing.
+- **Your repo is JVM, Go or Rust and the tooling assumes npm.** Maven and Gradle
+  coordinates, `pom.xml` compiler level, multi-module layouts, `go.mod` and
+  `Cargo.toml` are all first-class here.
+- **Your build truth lives in CI, not in the manifest.** No `engines.node`, no
+  lockfile, but `setup-node` pins 20 and a `run:` step calls npm — that gets
+  read.
+
+If none of those describe you, one of the tools in the next section is probably
+the better fit, and that section exists to send you there.
+
 ## This is a crowded space — read this before installing
 
 Several projects already cover adjacent, overlapping ground, and most of them
