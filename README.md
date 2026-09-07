@@ -1,32 +1,44 @@
 # verified-init
 
-**`/init` writes a CLAUDE.md by guessing. This writes one by proving.**
+Generates a `CLAUDE.md` in which **every line names the file it came from**, and
+fails CI when the repository no longer matches it. No model call, no network, no
+subprocess, no tokens — Python standard library only.
 
-A Claude Code skill and CLI that reads your repository and emits a `CLAUDE.md`
-in which **every line names the file it came from**. No model call, no network,
-no subprocess, no tokens. Python standard library only.
+Built because I needed deterministic, offline generation for air-gapped work,
+where a model-driven `/init` is not an option and a tool that phones home is not
+allowed. It is a personal tool published in case it is useful to someone with
+the same constraint.
 
----
+## This is a crowded space — read this before installing
 
-## The problem
+Several projects already cover adjacent, overlapping ground, and most of them
+are further along:
 
-`/init` reads your repository, then a language model writes plausible-sounding
-project instructions. Some are true. Some were true two quarters ago. You cannot
-tell which, because **no line carries a source**.
+| Project | What it does |
+| --- | --- |
+| [ctxlint](https://www.npmjs.com/package/@yawlabs/ctxlint) | The most established linter here. Rules include `paths/not-found`, `paths/glob-no-match`, `commands/script-not-found`, `commands/make-target-not-found`, `staleness/stale` |
+| [agnix](https://github.com/agent-sh/agnix) | 455 rules, GitHub Action, SARIF output, IDE extensions |
+| [agentsgen](https://github.com/markoblogo/AGENTS.md_generator) | Python, deterministic, marker-based safe updates, `--check` and a drift-gating Action |
+| [agents-lint](https://github.com/giacomo/agents-lint) | Generates with `agents-lint init`, then lints the result |
+| [rulesync](https://github.com/dyoshikawa/rulesync) | Deterministic generation across 40 agent formats, with `generate --check` |
+| [plinth](https://github.com/jabrena/plinth) | Generates AGENTS.md for Java projects, distributed via Maven Central |
+| [claude-drift](https://github.com/marky291/claude-drift) · [cclint](https://github.com/felixgeelhaar/cclint) | Audit CLAUDE.md, skills and agents against the codebase |
 
-Then the codebase moves — a script is renamed, a directory is deleted, the Java
-level bumps — and `CLAUDE.md` quietly starts lying to every session that reads
-it. You pay tokens for the lie, on every run, forever.
+If you want a maintained linter, use ctxlint or agnix. If you want generation on
+the JVM, use plinth. **Reach for this one only if you specifically need
+generation that runs with no network, no model, and no dependencies** — which is
+the narrow reason it exists.
 
-There are good linters for the second half of that problem
-([agents-lint](https://github.com/giacomo/agents-lint),
-[cclint](https://github.com/felixgeelhaar/cclint),
-[claude-drift](https://github.com/marky291/claude-drift)). They audit a file
-someone else wrote.
+One more thing worth knowing before you adopt any of these: Anthropic's own
+guidance tells you to keep *pitfalls, rationale and conventions* out of the
+derivable pile, and Claude Code's `/doctor` offers to **delete** directory
+layouts, dependency lists and architecture overviews from a checked-in
+`CLAUDE.md`. A measurement across 138 repositories and 5,694 PRs
+([arXiv:2602.11988](https://arxiv.org/abs/2602.11988)) found context files did
+not improve task success while raising inference cost by over 20%. Generated
+repo overviews are not free, and they may not be worth their context budget.
 
-**Nobody closed the loop.** Generators do not verify; verifiers do not generate.
-
-## What this does instead
+## What it does
 
 Deterministic code, not a prompt. It reads your manifests and your filesystem,
 and if it cannot prove something it does not write it — it tells you what it
@@ -214,12 +226,23 @@ alongside a regression for the self-reference bug the suite caught during
 development, and `TestSkillPackaging` guards the skill directory so the runner
 cannot silently stop resolving the package.
 
-## Prior art
+## Honest limits
 
-This exists because of the tools it does not replace. `agents-lint`, `cclint`
-and `claude-drift` audit instruction files that already exist, and do it well.
-`verified-init` is the other half: it produces the file in the first place, with
-the evidence attached, so there is something worth auditing.
+- **The staleness it guards against is real but not frequent.** I measured 22
+  public repositories with hand-written agent context files: roughly one
+  demonstrably-broken claim per repo, and about half had none at all. Re-running
+  the measurement on the same files disagreed with itself often enough that I
+  would not defend a precise figure. Breakage tracked whether maintainers looked
+  after the file, not how much the code changed.
+- **The provenance tiers are for humans, not the model.** As visible text they
+  spend context budget; as HTML comments they are stripped before injection.
+  They help a reviewer decide whether to trust a line. They do not change agent
+  behaviour.
+- **Most of what it can prove is derivable anyway.** An `@package.json` import in
+  your `CLAUDE.md` is always fresh, costs no tool, and never rots. Prefer it
+  wherever it fits; this tool earns its place mainly when you also want the
+  CI drift gate and the tiering.
+- **Not a linter.** It does not check prose you wrote. ctxlint and agnix do.
 
 ## License
 
