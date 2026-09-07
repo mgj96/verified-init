@@ -47,19 +47,22 @@ def detect(root, ctx):
         probes.append(Probe(id="repo.ci", looked_for=".github/workflows/*.yml"))
 
     # Files a contributor is expected to read before changing anything.
-    for filename, label in (
-        ("CONTRIBUTING.md", "Contribution rules"),
-        ("CODE_OF_CONDUCT.md", "A code of conduct"),
-        ("SECURITY.md", "A security policy"),
+    # Each file gets its own sentence: a shared template produced nonsense like
+    # "handover notes ... read it before contributing".
+    for filename, sentence in (
+        ("HANDOVER.md", "`HANDOVER.md` carries the current state of the work; read it first."),
+        ("CONTRIBUTING.md", "Contribution rules are in `CONTRIBUTING.md`; follow them for any change."),
+        ("ARCHITECTURE.md", "`ARCHITECTURE.md` explains the structure; read it before moving things."),
+        ("CONVENTIONS.md", "`CONVENTIONS.md` defines this project's conventions; follow them."),
+        ("CODE_OF_CONDUCT.md", "A code of conduct applies (`CODE_OF_CONDUCT.md`)."),
+        ("SECURITY.md", "Report vulnerabilities as described in `SECURITY.md`; do not open a public issue."),
     ):
         if exists(root, filename):
             claims.append(
                 Claim(
                     id="repo.doc.{}".format(filename.split(".")[0].lower()),
                     section="Conventions",
-                    text="{} are documented in `{}`; read it before contributing.".format(
-                        label, filename
-                    ),
+                    text=sentence,
                     status=VERIFIED,
                     evidence="{} present".format(filename),
                 )

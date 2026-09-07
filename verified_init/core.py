@@ -24,6 +24,21 @@ SUPERSEDES = {
     "node.workspaces": ("repo.layout.packages",),
 }
 
+#: A fact declared somewhere unexpected still answers the question. A repo with
+#: no ``engines.node`` and no lockfile is not a repo with no pinned Node version
+#: -- CI pins it, and CI is the version that has to work. Unlike SUPERSEDES this
+#: only silences the probe: if the manifest ALSO declares one, both claims stand,
+#: and a disagreement between them is worth seeing.
+#: Only map a probe here when the CI fact answers the probe's actual QUESTION.
+#: `ci.commands` deliberately does not answer the script probes: CI running
+#: `npm run docs:build` says nothing about whether `scripts.build` exists, and
+#: that probe is precisely scoped and still true.
+ANSWERS_PROBE = {
+    "ci.toolchain.node": ("node.engine",),
+    "ci.toolchain.python": ("py.version",),
+    "ci.package_manager": ("node.pm",),
+}
+
 
 def analyze(root: str, output_name: str = DEFAULT_OUTPUT) -> Analysis:
     """Read ``root`` and return every claim that could be justified.
@@ -65,9 +80,18 @@ def analyze(root: str, output_name: str = DEFAULT_OUTPUT) -> Analysis:
     for claim_id in superseded:
         by_id.pop(claim_id, None)
 
-    # A probe is only worth reporting if nothing ended up proving that id, and
-    # nothing more specific has already answered the question.
-    open_probes = [p for p in all_probes if p.id not in by_id and p.id not in superseded]
+    answered = set()
+    for claim_id, probe_ids in ANSWERS_PROBE.items():
+        if claim_id in by_id:
+            answered.update(probe_ids)
+
+    # A probe is only worth reporting if nothing proved that id, nothing more
+    # specific replaced it, and no other file already answered its question.
+    open_probes = [
+        p
+        for p in all_probes
+        if p.id not in by_id and p.id not in superseded and p.id not in answered
+    ]
     open_probes.sort(key=lambda p: p.id)
 
     return Analysis(

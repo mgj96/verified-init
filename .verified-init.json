@@ -1,5 +1,15 @@
 {
   "claims": {
+    "ci.commands": {
+      "evidence": ".github/workflows/ci.yml -> run: steps",
+      "status": "verified",
+      "text": "CI runs, in order: `python -m unittest discover -s tests -v`, `python skills/verified-init/scripts/run.py --report .`, `python -m verified_init --check .`."
+    },
+    "ci.toolchain.python": {
+      "evidence": ".github/workflows/ci.yml -> python-version",
+      "status": "verified",
+      "text": "CI builds on Python 3.13."
+    },
     "py.description": {
       "evidence": "pyproject.toml -> description",
       "status": "verified",
@@ -38,6 +48,7 @@
   },
   "detectors": [
     "misc",
+    "ci",
     "repo"
   ],
   "generator": "verified-init@0.1.0",

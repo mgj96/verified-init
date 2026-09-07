@@ -191,7 +191,16 @@ Written by a human. Never touched by the tool.
 | `node` | `package.json` — description, license, packageManager, engines, scripts, workspaces, `type`, **declared dependencies → stack and test runner** (Next.js, React, Vue, VitePress, Astro, Nuxt, Express, NestJS, Electron, Vitest, Jest, Playwright, …); lockfiles, `tsconfig.json`, `.nvmrc` |
 | `java` | `pom.xml` — artifactId, compiler level, modules, **declared `<artifactId>`s → stack** (Spring Boot Web/WebFlux/Data JPA/Security, Hibernate, Lombok, MapStruct, Quarkus, Micronaut, JUnit 5, Mockito, Testcontainers, …); `build.gradle[.kts]` toolchain and coordinates, `settings.gradle[.kts]`, `mvnw` / `gradlew` |
 | `misc` | `pyproject.toml` (description, requires-python, **dependencies → Django / FastAPI / Flask / SQLAlchemy / pytest …**), `requirements.txt`, `uv.lock` / `poetry.lock`, `go.mod` (**require → Gin / Echo / GORM / Cobra**), `Cargo.toml` (**[dependencies] → Axum / Actix / Tokio / Serde**), `Makefile` (`.PHONY` only) |
-| `repo` | `.github/workflows/`, `.editorconfig`, `.gitignore`, `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, other agent instruction files, conventional source and test directories |
+| `ci` | `.github/workflows/*.yml` — **`setup-node` / `setup-java` / `setup-python` / `setup-go` versions, the `run:` steps CI actually executes, the package manager it invokes, GitHub Pages deploy target and published path** |
+| `repo` | `.editorconfig`, `.gitignore`, `LICENSE`, `HANDOVER.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `CONVENTIONS.md`, `SECURITY.md`, other agent instruction files, conventional source and test directories |
+
+CI gets its own detector because it is the version of the build that has to
+work. It also answers questions the manifest leaves open: a repo with no
+`engines.node` and no lockfile still pins Node in `setup-node` and still names
+its package manager in a `run:` step. Without reading workflows, both get
+reported as absent when they are merely declared elsewhere — and both claims
+stand when the manifest and CI disagree, because that disagreement is worth
+seeing.
 
 Stack detection reads the dependency the project **declared**, so it stays
 verified. An unrecognised dependency produces no claim at all — a wrong stack
@@ -221,7 +230,7 @@ section then id, and no timestamp is recorded.
 python -m unittest discover -s tests -v
 ```
 
-59 tests, no dependencies. `TestDeterminism` pins the property down explicitly,
+66 tests, no dependencies. `TestDeterminism` pins the property down explicitly,
 alongside a regression for the self-reference bug the suite caught during
 development, and `TestSkillPackaging` guards the skill directory so the runner
 cannot silently stop resolving the package.

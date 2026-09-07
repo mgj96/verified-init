@@ -411,6 +411,96 @@ class TestCli(RepoCase):
         self.assertFalse(os.path.exists(os.path.join(root, "CLAUDE.md")))
 
 
+class TestCi(RepoCase):
+    """CI is what actually has to work, so it is treated as a declaration."""
+
+    PAGES_WORKFLOW = (
+        "name: Deploy site\n"
+        "on:\n  push:\n    branches: [main]\n"
+        "jobs:\n  build:\n    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "      - uses: actions/setup-node@v4\n"
+        "        with:\n          node-version: 20\n"
+        "      - run: npm install\n"
+        "      - run: echo skip me\n"
+        "      - run: npm run docs:build\n"
+        "      - uses: actions/upload-pages-artifact@v3\n"
+        "        with:\n          path: study/.vitepress/dist\n"
+        "      - uses: actions/deploy-pages@v4\n"
+    )
+
+    def test_reads_toolchain_commands_and_deploy_target(self):
+        root = self.fixture(
+            {"package.json": '{"name":"x"}', ".github/workflows/deploy.yml": self.PAGES_WORKFLOW}
+        )
+        a = analyze(root)
+        self.assertIn("Node 20", a.by_id("ci.toolchain.node").text)
+        self.assertIn("npm install", a.by_id("ci.package_manager").text)
+        self.assertIn("npm run docs:build", a.by_id("ci.commands").text)
+        self.assertIn("GitHub Pages", a.by_id("ci.deploy").text)
+        self.assertIn("study/.vitepress/dist", a.by_id("ci.build_output").text)
+
+    def test_plumbing_steps_are_not_reported_as_build_commands(self):
+        root = self.fixture(
+            {"package.json": '{"name":"x"}', ".github/workflows/deploy.yml": self.PAGES_WORKFLOW}
+        )
+        self.assertNotIn("echo skip me", analyze(root).by_id("ci.commands").text)
+
+    def test_ci_answers_the_node_version_and_package_manager_probes(self):
+        """A repo can pin Node in CI and nowhere else; that is still pinned.
+
+        Regression: the tool reported "engines.node, .nvmrc, .node-version" and
+        "cannot tell npm from pnpm" as absent on a repo whose workflow said
+        `node-version: 20` and ran `npm install` two lines apart.
+        """
+        root = self.fixture(
+            {"package.json": '{"name":"x"}', ".github/workflows/deploy.yml": self.PAGES_WORKFLOW}
+        )
+        probe_ids = [p.id for p in analyze(root).probes]
+        self.assertNotIn("node.engine", probe_ids)
+        self.assertNotIn("node.pm", probe_ids)
+
+    def test_ci_commands_do_not_silence_the_script_probes(self):
+        """`npm run docs:build` in CI says nothing about `scripts.build`."""
+        root = self.fixture(
+            {"package.json": '{"name":"x"}', ".github/workflows/deploy.yml": self.PAGES_WORKFLOW}
+        )
+        probe_ids = [p.id for p in analyze(root).probes]
+        self.assertIn("node.script.build", probe_ids)
+
+    def test_manifest_and_ci_versions_both_stand_when_they_disagree(self):
+        """Two sources, two claims. A disagreement is worth seeing, not hiding."""
+        root = self.fixture(
+            {
+                "package.json": '{"name":"x","engines":{"node":">=18"}}',
+                ".github/workflows/deploy.yml": self.PAGES_WORKFLOW,
+            }
+        )
+        a = analyze(root)
+        self.assertIn(">=18", a.by_id("node.engine").text)
+        self.assertIn("Node 20", a.by_id("ci.toolchain.node").text)
+
+    def test_no_workflows_means_no_ci_claims(self):
+        root = self.fixture({"package.json": '{"name":"x"}'})
+        a = analyze(root)
+        self.assertIsNone(a.by_id("ci.commands"))
+        self.assertIn("repo.ci", [p.id for p in a.probes])
+
+
+class TestReadFirstDocs(RepoCase):
+    def test_each_document_gets_its_own_sentence(self):
+        root = self.fixture(
+            {
+                "package.json": '{"name":"x"}',
+                "HANDOVER.md": "# state\n",
+                "SECURITY.md": "# policy\n",
+            }
+        )
+        a = analyze(root)
+        self.assertIn("read it first", a.by_id("repo.doc.handover").text)
+        self.assertIn("do not open a public issue", a.by_id("repo.doc.security").text)
+
+
 class TestSupersedes(RepoCase):
     """A specific claim must silence the generic one that contradicts it."""
 
